@@ -217,6 +217,19 @@ function useConfetti() {
   return shoot;
 }
 
+const QUESTIONS = [
+  {
+    q: "Anh ấn tượng gì về em nhất? 💕",
+    a: ["Dễ thương", "Chiều cao", "Học giỏi"],
+    correct: 1,
+  },
+  {
+    q: "Món ăn anh thích nhất là gì? 🍲",
+    a: ["Bánh mì", "Bún bò", "Mì Quảng"],
+    correct: 0,
+  },
+];
+
 export default function App() {
   const [config, setConfig] = useLocalState("bdx-config", DEFAULTS);
   const { days, hours, mins, secs } = useCountdown(config.birthdayISO);
@@ -230,6 +243,39 @@ export default function App() {
   const [secondGiftOpened, setSecondGiftOpened] = useState(false);
   const [selectedCard, setSelectedCard] = useLocalState("selectedCard", null); // ✅ lưu vào localStorage
   const { reached } = useCountdown(config.birthdayISO);
+  const [quizStarted, setQuizStarted] = useState(false);
+  const [quizDone, setQuizDone] = useState(false);
+  const [score, setScore] = useState(0);
+  const [answers, setAnswers] = useState({});
+  const [showPreview, setShowPreview] = useState(true);
+  const [shuffling, setShuffling] = useState(false);
+  const [cards, setCards] = useState([1, 2, 3]);
+
+  useEffect(() => {
+    if (quizDone && score >= 2 && !selectedCard) {
+      // Bước 1: show quà trong 2s
+      setShowPreview(true);
+
+      const previewTimer = setTimeout(() => {
+        // Bước 2: bắt đầu shuffle
+        setShowPreview(false);
+        setShuffling(true);
+
+        let count = 0;
+        const interval = setInterval(() => {
+          setCards((prev) => [...prev].sort(() => Math.random() - 0.5));
+          count++;
+          if (count > 12) {
+            clearInterval(interval);
+            setShuffling(false);
+          }
+        }, 150); // shuffle nhanh hơn: 0.15s/lần
+      }, 2000);
+
+      return () => clearTimeout(previewTimer);
+    }
+  }, [quizDone, score, selectedCard]);
+
 
   useEffect(() => {
     if (config.images.length > 0) {
@@ -252,10 +298,10 @@ export default function App() {
   };
 
   const handleOpenGift = () => {
-    if (!reached) return;
-    if (giftOpened) return;
+    // if (!reached) return;
+    // if (giftOpened) return;
     setGiftOpened(true);
-    setMusicOn(true);
+    // setMusicOn(true);
     shoot();
   };
 
@@ -322,7 +368,6 @@ export default function App() {
           </div>
 
           {/* Gift Button */}
-          {/* Gift Button */}
           {!giftOpened && (
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
@@ -334,9 +379,8 @@ export default function App() {
                 whileHover={reached ? { rotate: 5, scale: 1.05 } : {}}
                 whileTap={reached ? { scale: 0.95 } : {}}
                 onClick={handleOpenGift}
-                className={`cursor-pointer text-[200px] ${
-                  reached ? "text-pink-400" : "text-gray-500 opacity-50 cursor-not-allowed"
-                }`}
+                className={`cursor-pointer text-[200px] ${reached ? "text-pink-400" : "text-gray-500 opacity-50 cursor-not-allowed"
+                  }`}
               >
                 🎁
               </motion.div>
@@ -506,8 +550,76 @@ export default function App() {
         )}
       </AnimatePresence>
 
-        {/* --- Hộp quà thứ 2 ở cuối trang --- */}
-      {!secondGiftOpened && !selectedCard && (
+      {/* Khi mở hộp quà nhưng chưa làm quiz */}
+      {secondGiftOpened && !quizStarted && !quizDone && (
+        <div className="text-center my-10">
+          <p className="mb-4 text-xl">Trước khi mở quà, trả lời vài câu hỏi đã nhé 😘</p>
+          <Button onClick={() => setQuizStarted(true)}>Bắt đầu Quiz</Button>
+        </div>
+      )}
+
+      {/* Quiz */}
+      {quizStarted && !quizDone && (
+        <div className="space-y-6 max-w-lg mx-auto my-10">
+          {QUESTIONS.map((q, i) => (
+            <div key={i} className="p-4 bg-white/10 rounded-xl">
+              <p className="mb-2">{q.q}</p>
+              <div className="flex gap-3 flex-wrap">
+                {q.a.map((ans, idx) => {
+                  const chosen = answers?.[i]; // state lưu câu đã chọn
+                  const isCorrect = q.correct === idx;
+                  return (
+                    <Button
+                      key={idx}
+                      onClick={() => {
+                        if (chosen !== undefined) return; // đã chọn rồi thì thôi
+                        if (idx === q.correct) setScore((s) => s + 1);
+                        setAnswers((prev) => ({ ...prev, [i]: idx }));
+
+                        // nếu là câu cuối cùng thì kết thúc quiz
+                        if (i === QUESTIONS.length - 1) {
+                          setQuizDone(true);
+                        }
+                      }}
+                      disabled={chosen !== undefined}
+                      className={
+                        chosen === idx
+                          ? isCorrect
+                            ? "bg-green-600"
+                            : "bg-red-600"
+                          : ""
+                      }
+                    >
+                      {ans}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {quizDone && score < 2 && (
+        <div className="text-center my-10 text-xl">
+          😅 Em chỉ đúng {score}/{QUESTIONS.length} thôi… thử lại nhé!
+          <div className="mt-4">
+            <Button
+              onClick={() => {
+                setQuizStarted(false);
+                setQuizDone(false);
+                setScore(0);
+                setAnswers({});
+              }}
+            >
+              Làm lại
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* --- Hộp quà thứ 2 ở cuối trang --- */}
+      {!quizDone && !selectedCard && (
         <div className="my-20 flex justify-center">
           <motion.div
             whileHover={{ rotate: 5, scale: 1.05 }}
@@ -520,18 +632,54 @@ export default function App() {
         </div>
       )}
 
-      {/* Khi mở hộp quà 2 → hiện 3 thẻ */}
-      {secondGiftOpened && !selectedCard && (
+      {/* Khi mở hộp quà 2 → hiện 3 thẻ (chỉ khi quizDone & score đủ) */}
+      {quizDone && score >= 2 && !selectedCard && (
         <div className="flex justify-center gap-6 my-20">
-          {[1, 2, 3].map((num) => (
+          {cards.map((num) => (
             <motion.div
               key={num}
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setSelectedCard(num)}
-              className="w-40 h-60 bg-pink-500 rounded-xl flex items-center justify-center text-2xl font-bold cursor-pointer shadow-lg"
+              layout   // 👈 rất quan trọng để AnimatePresence + layout animation hoạt động
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              whileHover={!shuffling && !showPreview ? { scale: 1.1 } : {}}
+              whileTap={!shuffling && !showPreview ? { scale: 0.95 } : {}}
+              onClick={() => {
+                if (!shuffling && !showPreview) setSelectedCard(num);
+              }}
+              className="w-40 h-60 rounded-xl overflow-hidden shadow-lg cursor-pointer flex items-center justify-center text-2xl font-bold bg-pink-500 text-white"
             >
-              Thẻ {num}
+              {showPreview ? (
+                <div className="flex flex-col items-center justify-center w-full h-full p-3 text-center">
+                  {num === 1 && (
+                    <>
+                      <span className="text-5xl mb-3">💍</span>
+                      <span className="text-lg font-semibold">iPhone 16</span>
+                    </>
+                  )}
+                  {num === 2 && (
+                    <>
+                      <span className="text-5xl mb-3">💳</span>
+                      <span className="text-lg font-semibold">Voucher buffet ốc</span>
+                      <span className="text-lg font-semibold">1 năm</span>
+                    </>
+                  )}
+                  {num === 3 && (
+                    <>
+                      <span className="text-5xl mb-3">💸</span>
+                      <span className="text-lg font-semibold">Voucher mua sắm</span>
+                      <span className="text-lg font-semibold">5 triệu</span>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div
+                  className="w-full h-full"
+                  style={{
+                    backgroundImage: `url(https://happy-birthday.s3.ap-northeast-1.amazonaws.com/542378545_1479001296473026_7360850152904275852_n.jpg)`,
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
+                  }}
+                />
+              )}
             </motion.div>
           ))}
         </div>
@@ -540,7 +688,7 @@ export default function App() {
       {/* Nội dung các thẻ */}
       {selectedCard === 1 && (
         <div className="mb-20 text-center text-3xl font-bold text-pink-400">
-          💍 1 em gấu bông ❤️
+          💍 Iphone 16 ❤️
         </div>
       )}
 
@@ -554,7 +702,7 @@ export default function App() {
         <div className="text-center">
           <FlyingMoney show={true} />
           <p className="mb-20 text-2xl font-bold mt-4">
-            Voucher mua sắm trị giá 2 triệu ❤️
+            Voucher mua sắm trị giá 5 triệu ❤️
             <br />
             💸 Em là kho báu lớn nhất của anh! Đây thêm tiền tiêu nè 😘
           </p>
