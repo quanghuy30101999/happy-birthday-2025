@@ -298,10 +298,10 @@ export default function App() {
   };
 
   const handleOpenGift = () => {
-    // if (!reached) return;
-    // if (giftOpened) return;
+    if (!reached) return;
+    if (giftOpened) return;
     setGiftOpened(true);
-    // setMusicOn(true);
+    setMusicOn(true);
     shoot();
   };
 
