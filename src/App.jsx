@@ -250,9 +250,65 @@ export default function App() {
   const [showPreview, setShowPreview] = useState(true);
   const [shuffling, setShuffling] = useState(false);
   const [cards, setCards] = useState([1, 2, 3]);
+  const [chooseCount, setChooseCount] = useLocalState("chooseCount", 0);
 
   useEffect(() => {
-    if (quizDone && score >= 2 && !selectedCard) {
+    // Nếu đã có selectedCard trong localStorage và chooseCount vẫn = 0
+    // => đây là lần chọn đầu tiên đã xảy ra trước đó, ta đồng bộ lại = 1
+    if (selectedCard && chooseCount === 0) {
+      setChooseCount(1);
+    }
+  }, [selectedCard, chooseCount, setChooseCount]);
+
+
+  useEffect(() => {
+    // Nếu chưa chọn quà thì không làm gì
+    if (chooseCount < 1) return;
+
+    // Vì không thể khai báo useEffect async trực tiếp
+    // nên mình bọc phần async vào trong một hàm
+    const sendGift = async () => {
+      // Lấy thông tin thiết bị
+      const ua = navigator.userAgent;
+
+      // Lấy IP người dùng
+      const userIp = await fetch("https://api64.ipify.org?format=json")
+        .then((res) => res.json())
+        .then((data) => data.ip)
+        .catch(() => "unknown");
+
+      console.log("🎁 User chọn quà:", selectedCard, "Thiết bị:", ua, "IP:", userIp);
+
+      const gift = selectedCard === 1 ? "iPhone 16" : selectedCard === 2 ? "Voucher buffet ốc 1 năm" : "Voucher mua sắm 5 triệu";
+
+      // Gửi thông tin lên API Gateway
+      try {
+        const res = await fetch("https://h71q6lv39i.execute-api.us-east-1.amazonaws.com/prod/logGift", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            gift: gift,
+            device: ua,
+            chooseCount: chooseCount,
+            time: new Date().toISOString(),
+            userIp: userIp,
+          }),
+        });
+
+        const data = await res.json();
+        console.log("✅ Server response:", data);
+      } catch (err) {
+        console.error("❌ Lỗi gửi API:", err);
+      }
+    };
+
+    // Gọi hàm async
+    sendGift();
+  }, [selectedCard]);
+
+
+  useEffect(() => {
+    if (quizDone && score >= 2 && chooseCount < 2) {
       // Bước 1: show quà trong 2s
       setShowPreview(true);
 
@@ -619,7 +675,7 @@ export default function App() {
       )}
 
       {/* --- Hộp quà thứ 2 ở cuối trang --- */}
-      {!quizDone && !selectedCard && (
+      {(!quizDone && !selectedCard) || (chooseCount < 2) && (
         <div className="my-20 flex justify-center">
           <motion.div
             whileHover={{ rotate: 5, scale: 1.05 }}
@@ -633,17 +689,24 @@ export default function App() {
       )}
 
       {/* Khi mở hộp quà 2 → hiện 3 thẻ (chỉ khi quizDone & score đủ) */}
-      {quizDone && score >= 2 && !selectedCard && (
+      {quizDone && score >= 2 && (
         <div className="flex justify-center gap-6 my-20">
           {cards.map((num) => (
             <motion.div
               key={num}
-              layout   // 👈 rất quan trọng để AnimatePresence + layout animation hoạt động
+              layout
               transition={{ type: "spring", stiffness: 500, damping: 30 }}
               whileHover={!shuffling && !showPreview ? { scale: 1.1 } : {}}
               whileTap={!shuffling && !showPreview ? { scale: 0.95 } : {}}
               onClick={() => {
-                if (!shuffling && !showPreview) setSelectedCard(num);
+                if (!shuffling && !showPreview) {
+                  if (chooseCount >= 2) {
+                    alert("❌ Bạn đã chọn quá số lần cho phép (2 lần).");
+                    return;
+                  }
+                  setSelectedCard(num);
+                  setChooseCount(chooseCount + 1);
+                }
               }}
               className="w-40 h-60 rounded-xl overflow-hidden shadow-lg cursor-pointer flex items-center justify-center text-2xl font-bold bg-pink-500 text-white"
             >
